@@ -73,5 +73,5 @@
 
 3.  **스크립트 실행**
     ```bash
-    python api_post.py
+    python real_estate_posting.py
     ```

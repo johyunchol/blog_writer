@@ -2,8 +2,8 @@ name: Blog Auto Posting
 
 on:
   schedule:
-    # 한국 시간(KST) 기준 매일 오후 7시에 실행 (UTC 기준 10:00)
-    - cron: '0 10 * * *'
+    # 한국 시간(KST) 기준 매일 오전 8시에 실행 (UTC 기준 23:00)
+    - cron: '0 23 * * *'
   workflow_dispatch: # Actions 탭에서 수동으로 실행 가능
 
 jobs:
@@ -27,8 +27,8 @@ jobs:
           python -m pip install --upgrade pip
           pip install -r requirements.txt
 
-      - name: Run automation script
-        run: python main.py
+      - name: 부동산 블로그 포스팅
+        run: python real_estate_posting.py
         env:
           GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
           TISTORY_ID: ${{ secrets.TISTORY_ID }}
