@@ -28,7 +28,7 @@ jobs:
           pip install -r requirements.txt
 
       - name: 부동산 블로그 포스팅
-        run: python real_estate_posting.py
+        run: python src/tistory/real_estate_posting.py
         env:
           GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
           TISTORY_ID: ${{ secrets.TISTORY_ID }}
