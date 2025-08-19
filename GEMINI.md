@@ -1,20 +1,66 @@
-1. 전체 자동화 플로우
-신규 부동산 뉴스 수집 (파이썬 스크립트)
+**참고: 모든 응답은 한국어로 요청합니다.**
 
-주요 신문사 부동산 기사(예: 서울경제, 연합뉴스, 다음 부동산 등)의 실시간 헤드라인 및 요약 정보 크롤링.
+# Gemini 블로그 포스팅 자동화
 
-기사 요약 (파이썬)
+이 프로젝트는 Gemini API를 활용하여 최신 부동산 뉴스를 기반으로 블로그 포스팅을 자동으로 생성하고, Tistory 블로그에 게시하는 파이썬 스크립트(`api_post.py`)를 중심으로 구성됩니다.
 
-TextRank, Sumy, KoGPT 등 파이썬 요약 라이브러리를 사용하거나 Gemini-CLI 프롬프트로 요약.
+## 1. 전체 자동화 플로우
 
-블로그 글 생성
+1.  **블로그 글 생성 (Gemini API)**
+    *   `gemini-2.5-flash` 모델을 사용하여 지정된 프롬프트에 따라 최신 부동산 뉴스 기사를 검색하고 요약합니다.
+    *   검색된 내용을 바탕으로 Tistory 블로그 형식에 맞는 전문적인 글(HTML)을 생성합니다.
 
-수집/요약 자료를 Gemini-CLI로 포스팅 형식에 맞게 '블로그 글'로 재생성.
+2.  **Tistory 자동 로그인 및 쿠키 획득 (Selenium)**
+    *   Selenium을 사용하여 Tistory의 카카오 계정 로그인 페이지에 접속하고, 사용자 ID와 비밀번호로 로그인하여 인증 쿠키를 획득합니다.
 
-Github Actions 스케줄러
+3.  **블로그 글 게시 (Requests)**
+    *   획득한 인증 쿠키와 Gemini가 생성한 콘텐츠를 사용하여 Tistory 포스팅 API(`manage/post.json`)를 호출합니다.
+    *   이 과정에서 제목, 본문, 태그를 분리하고 형식에 맞게 데이터를 가공하여 전송합니다.
 
-매일 아침 8시, 오후 5시에 워크플로우가 자동 실행(cron 설정).
+4.  **실행 환경 (GitHub Actions)**
+    *   스크립트는 GitHub Actions의 Secrets에 저장된 환경 변수(`GEMINI_API_KEY`, `TISTORY_ID` 등)를 사용하여 실행되도록 설계되었습니다.
 
-Gemini-CLI&블로그 자동 게시
+## 2. `api_post.py` 스크립트 상세 분석
 
-Gemini-CLI가 생성한 markdown 파일 또는 텍스트를 블로그 API/Pages 등으로 자동 게시.
+### 주요 함수
+
+-   `generate_post_with_gemini(api_key)`
+    -   **역할**: Gemini API를 호출하여 블로그 콘텐츠를 생성합니다.
+    -   **프롬프트 주요 내용**:
+        -   실시간 부동산 뉴스 검색 및 요약.
+        -   Tistory TinyMCE 에디터에 맞는 HTML 형식으로 본문 생성.
+        -   제목, 서론, 본론, 결론 구조 및 전문적 어조 사용.
+        -   5개 이상의 관련 태그 포함 (`태그::` 형식).
+        -   2000자 이상의 분량.
+
+-   `post_to_tistory_requests(blog_name, tistory_id, tistory_pw, content)`
+    -   **역할**: 생성된 콘텐츠를 Tistory 블로그에 게시합니다.
+    -   **세부 동작**:
+        1.  **콘텐츠 파싱**: Gemini가 생성한 텍스트에서 제목(`# `), 태그(`태그::`), 본문을 분리합니다.
+        2.  **Selenium 로그인**: `get_tistory_cookies_with_selenium` 내부 함수를 호출하여 Tistory 로그인 후 세션 쿠키를 가져옵니다.
+        3.  **API 호출**: `requests` 라이브러리를 사용하여 Tistory 포스팅 API에 `POST` 요청을 보냅니다.
+        4.  **Payload 구성**: 제목, HTML로 변환된 본문, 태그, 카테고리 ID 등 포스팅에 필요한 정보를 JSON 형식으로 구성합니다.
+
+### 실행 로직 (`if __name__ == "__main__":`)
+
+-   GitHub Actions의 Secrets 또는 로컬 환경 변수에서 `GEMINI_API_KEY`, `TISTORY_ID`, `TISTORY_PW`, `TISTORY_BLOG_NAME` 값을 가져옵니다.
+-   `generate_post_with_gemini` 함수를 호출하여 글을 생성하고, 성공 시 `post_to_tistory_requests` 함수를 호출하여 포스팅을 완료합니다.
+
+## 3. 실행 방법
+
+1.  **필요 라이브러리 설치**
+    ```bash
+    pip install google-generativeai requests selenium
+    ```
+
+2.  **환경 변수 설정**
+    스크립트를 실행하기 위해 다음 환경 변수를 설정해야 합니다. (GitHub Actions의 경우 Secrets에 등록)
+    -   `GEMINI_API_KEY`: Google AI Studio에서 발급받은 API 키
+    -   `TISTORY_ID`: Tistory 로그인 아이디 (카카오 계정 이메일)
+    -   `TISTORY_PW`: Tistory 로그인 비밀번호
+    -   `TISTORY_BLOG_NAME`: Tistory 블로그 주소의 서브도메인 (예: `myblog`)
+
+3.  **스크립트 실행**
+    ```bash
+    python api_post.py
+    ```
