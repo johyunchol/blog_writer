@@ -2,7 +2,7 @@
 
 # Gemini 블로그 포스팅 자동화
 
-이 프로젝트는 Gemini API를 활용하여 최신 부동산 뉴스를 기반으로 블로그 포스팅을 자동으로 생성하고, Tistory 블로그에 게시하는 파이썬 스크립트(`api_post.py`)를 중심으로 구성됩니다.
+이 프로젝트는 Gemini API를 활용하여 최신 부동산 뉴스를 기반으로 블로그 포스팅을 자동으로 생성하고, Tistory 블로그에 게시하는 파이썬 스크립트(`real_estate_posting.py`)를 중심으로 구성됩니다.
 
 ## 1. 전체 자동화 플로우
 
@@ -23,7 +23,7 @@
 5.  **실행 환경 (GitHub Actions)**
     *   스크립트는 GitHub Actions의 Secrets에 저장된 환경 변수(`GEMINI_API_KEY`, `TISTORY_ID` 등)를 사용하여 실행되도록 설계되었습니다.
 
-## 2. `api_post.py` 스크립트 상세 분석
+## 2. `real_estate_posting.py` 스크립트 상세 분석
 
 ### 주요 함수
 
