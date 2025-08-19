@@ -2,8 +2,8 @@ name: Blog Auto Posting
 
 on:
   schedule:
-    # 한국 시간(KST) 기준 매일 오전 8시, 오후 5시에 실행 (UTC 기준 23:00, 08:00)
-    - cron: '0 23,8 * * *'
+    # 한국 시간(KST) 기준 매일 오후 7시에 실행 (UTC 기준 10:00)
+    - cron: '0 10 * * *'
   workflow_dispatch: # Actions 탭에서 수동으로 실행 가능
 
 jobs:

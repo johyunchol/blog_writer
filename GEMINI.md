@@ -7,7 +7,7 @@
 ## 1. 전체 자동화 플로우
 
 1.  **블로그 글 생성 (Gemini API)**
-    *   `gemini-2.5-flash` 모델을 사용하여 지정된 프롬프트에 따라 최신 부동산 뉴스 기사를 검색하고 요약합니다.
+    *   `gemini-1.5-flash` 모델을 사용하여 지정된 프롬프트에 따라 최신 부동산 뉴스 기사를 검색하고 요약합니다.
     *   검색된 내용을 바탕으로 Tistory 블로그 형식에 맞는 전문적인 글(HTML)을 생성합니다.
 
 2.  **Tistory 자동 로그인 및 쿠키 획득 (Selenium)**
@@ -17,12 +17,19 @@
     *   획득한 인증 쿠키와 Gemini가 생성한 콘텐츠를 사용하여 Tistory 포스팅 API(`manage/post.json`)를 호출합니다.
     *   이 과정에서 제목, 본문, 태그를 분리하고 형식에 맞게 데이터를 가공하여 전송합니다.
 
-4.  **실행 환경 (GitHub Actions)**
+4.  **결과 알림 (이메일)**
+    *   스크립트 실행 완료 후, 성공 또는 실패 결과를 지정된 이메일 주소로 발송합니다.
+
+5.  **실행 환경 (GitHub Actions)**
     *   스크립트는 GitHub Actions의 Secrets에 저장된 환경 변수(`GEMINI_API_KEY`, `TISTORY_ID` 등)를 사용하여 실행되도록 설계되었습니다.
 
 ## 2. `api_post.py` 스크립트 상세 분석
 
 ### 주요 함수
+
+-   `send_email(subject, body, sender_email, sender_password, recipient_email)`
+    -   **역할**: 스크립트 실행 결과를 이메일로 전송합니다.
+    -   **세부 동작**: Gmail의 SMTP 서버를 통해 지정된 수신자에게 성공 또는 실패 메시지를 전달합니다.
 
 -   `generate_post_with_gemini(api_key)`
     -   **역할**: Gemini API를 호출하여 블로그 콘텐츠를 생성합니다.
@@ -43,8 +50,9 @@
 
 ### 실행 로직 (`if __name__ == "__main__":`)
 
--   GitHub Actions의 Secrets 또는 로컬 환경 변수에서 `GEMINI_API_KEY`, `TISTORY_ID`, `TISTORY_PW`, `TISTORY_BLOG_NAME` 값을 가져옵니다.
+-   GitHub Actions의 Secrets 또는 로컬 환경 변수에서 필요한 모든 값(`GEMINI_API_KEY`, `TISTORY_ID`, `SENDER_EMAIL` 등)을 가져옵니다.
 -   `generate_post_with_gemini` 함수를 호출하여 글을 생성하고, 성공 시 `post_to_tistory_requests` 함수를 호출하여 포스팅을 완료합니다.
+-   모든 과정의 최종 성공 또는 실패 결과를 `send_email` 함수를 통해 이메일로 알립니다.
 
 ## 3. 실행 방법
 
@@ -59,6 +67,9 @@
     -   `TISTORY_ID`: Tistory 로그인 아이디 (카카오 계정 이메일)
     -   `TISTORY_PW`: Tistory 로그인 비밀번호
     -   `TISTORY_BLOG_NAME`: Tistory 블로그 주소의 서브도메인 (예: `myblog`)
+    -   `SENDER_EMAIL`: 발신자 Gmail 주소 (예: `my-email@gmail.com`)
+    -   `SENDER_PASSWORD`: 발신자 Gmail 앱 비밀번호 (2단계 인증 사용 시 필요)
+    -   `RECIPIENT_EMAIL`: 수신자 이메일 주소
 
 3.  **스크립트 실행**
     ```bash
