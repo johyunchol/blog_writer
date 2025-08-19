@@ -26,20 +26,16 @@ def generate_post_with_gemini(api_key):
     
     **다음의 사이트들에서 자료를 취합해 주세요**
     - https://m2.land.naver.com/news : <div class="article" id="article_today"></div> 에 오늘 날짜의 뉴스가 있습니다.
-    - https://www.yna.co.kr/economy/real-estate
-    - https://www.hankyung.com/realestate
-    
     
     **다음 지침을 반드시 따라주세요:**
-    1. **티스토리 TinyMCE 에디터에 맞는 html 형식**으로 작성해주세요. 단, <body> 안에 들어가는 내용만 뽑아주세요. <html><head>는 필요없습니다.
-    2. 글의 가장 첫 줄에는 흥미를 유발할 수 있는 **제목**을 `# 제목` 형식으로 넣어주세요.
-    3. 서론, 본론, 결론의 구조를 갖추고, 각 뉴스 내용을 자연스럽게 연결하여 설명해주세요.
-    4. 독자들이 이해하기 쉽게 친절하고 전문적인 어조를 사용해주세요.
-    5. 이모티콘등을 섞어서 사용해주세요. 단, 첫줄에는 이모티콘을 사용하지 마세요.
-    6. 글의 마지막에는 #부동산 #부동산뉴스 #시장분석 #내집마련 등 관련 **태그**를 5개 이상 추가해주세요.
-    7. 글의 내용은 **2000자 이상** 작성해주세요.
-    8. 이미지도 포함하여 작성해주세요. 이미지가 필요한 경우, 관련된 이미지를 찾아서 `<img src="이미지URL" alt="이미지설명">` 형식으로 삽입해주세요.   
-    9. 제목의 길이는 너무 길지 않게 30자에서 40자 사이로 작성해주세요.
+    - **티스토리 TinyMCE 에디터에 맞는 html 형식**으로 작성해주세요. 단, <body> 안에 들어가는 내용만 뽑아주세요. <html><head>는 필요없습니다.
+    - 글의 가장 첫 줄에는 흥미를 유발할 수 있는 **제목**을 `# 제목` 형식으로 넣어주세요.
+    - 서론, 본론, 결론의 구조를 갖추고, 각 뉴스 내용을 자연스럽게 연결하여 설명해주세요.
+    - 독자들이 이해하기 쉽게 친절하고 전문적인 어조를 사용해주세요.
+    - 이모티콘등을 섞어서 사용해주세요. 단, 첫줄에는 이모티콘을 사용하지 마세요.
+    - 글의 마지막에는 태그::부동산,부동산뉴스,시장분석,내집마련 등 관련 **태그**를 5개 이상 추가해주세요.
+    - 글의 내용은 **2000자 이상** 작성해주세요.
+    - 제목의 길이는 너무 길지 않게 30자에서 40자 사이로 작성해주세요.
     """
 
     try:
@@ -147,19 +143,21 @@ def post_to_tistory_requests(blog_name, tistory_id, tistory_pw, content):
     # 태그 추출 및 본문에서 제거
     extracted_tags = []
     post_body_lines = []
-
-    # 마지막 줄부터 역순으로 탐색하여 태그를 찾음
-    # 0번째 줄은 제목이므로 제외하고, 태그가 발견되면 그 이전 줄까지만 본문으로 간주
     tag_line_found = False
+
+    # 마지막 줄부터 역순으로 탐색하여 태그 라인을 찾음
     for i in range(len(lines) - 1, 0, -1):
         line = lines[i].strip()
-        if not tag_line_found and line.startswith('#') and len(line.split()) > 1: # #으로 시작하고 여러 단어가 있는 경우 태그로 간주
-            # 태그 파싱: # 제거하고 공백으로 분리
-            tags = [tag.strip().replace('#', '') for tag in line.split('#') if tag.strip()]
+        if not tag_line_found and '태그::' in line:
+            # HTML 태그가 포함될 수 있으므로 정규식으로 제거
+            cleaned_line = re.sub(r'<[^>]+>', '', line)
+            # '태그::' 부분을 제거하고, 쉼표로 태그들을 분리
+            tag_string = cleaned_line.split('::', 1)[-1]
+            tags = [tag.strip() for tag in tag_string.split(',') if tag.strip()]
             extracted_tags.extend(tags)
-            tag_line_found = True # 태그 줄을 찾았음을 표시
+            tag_line_found = True # 태그 라인을 찾았으므로 플래그를 설정
         else:
-            post_body_lines.insert(0, lines[i]) # 본문은 원래 순서대로 추가
+            post_body_lines.insert(0, lines[i]) # 태그 라인이 아닌 경우, 본문으로 간주하고 순서를 유지하며 추가
 
     post_content = '\n'.join(post_body_lines).strip()
     tistory_tags = ','.join(extracted_tags)
