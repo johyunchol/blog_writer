@@ -37,3 +37,10 @@ jobs:
           SENDER_EMAIL: ${{ secrets.SENDER_EMAIL }}
           SENDER_PASSWORD: ${{ secrets.SENDER_PASSWORD }}
           RECIPIENT_EMAIL: ${{ secrets.RECIPIENT_EMAIL }}
+
+      - name: Upload Selenium Error Screenshot
+        uses: actions/upload-artifact@v4
+        if: failure()
+        with:
+          name: selenium-error-screenshot
+          path: selenium_error.png
