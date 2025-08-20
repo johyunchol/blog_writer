@@ -22,14 +22,6 @@ jobs:
       - name: Install Chrome
         uses: browser-actions/setup-chrome@latest
 
-      - name: Make Chromedriver Executable
-        run: chmod +x chromedriver
-
-      - name: Debug Chromedriver
-        run: |
-          ls -l
-          ./chromedriver --version
-
       - name: Install Python dependencies
         run: |
           python -m pip install --upgrade pip
