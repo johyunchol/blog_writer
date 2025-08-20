@@ -34,3 +34,6 @@ jobs:
           TISTORY_ID: ${{ secrets.TISTORY_ID }}
           TISTORY_PW: ${{ secrets.TISTORY_PW }}
           TISTORY_BLOG_NAME: ${{ secrets.TISTORY_BLOG_NAME }}
+          SENDER_EMAIL: ${{ secrets.SENDER_EMAIL }}
+          SENDER_PASSWORD: ${{ secrets.SENDER_PASSWORD }}
+          RECIPIENT_EMAIL: ${{ secrets.RECIPIENT_EMAIL }}
