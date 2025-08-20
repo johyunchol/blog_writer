@@ -110,7 +110,7 @@ def post_to_tistory_requests(blog_name, tistory_id, tistory_pw, content):
         print("Selenium을 사용하여 로그인 쿠키를 획득합니다...")
 
         script_dir = os.path.dirname(os.path.abspath(__file__))
-        chromedriver_path = os.path.join(script_dir, "chromedriver")
+        chromedriver_path = os.path.join(script_dir, "../../chromedriver")
         
         options = webdriver.ChromeOptions()
         options.add_argument("--headless")

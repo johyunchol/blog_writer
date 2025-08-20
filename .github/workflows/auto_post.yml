@@ -27,11 +27,6 @@ jobs:
           python -m pip install --upgrade pip
           pip install -r requirements.txt
 
-      - name: Debug Environment Variables
-        run: |
-          echo "SENDER_EMAIL: ${{ secrets.SENDER_EMAIL }}"
-          echo "SENDER_PASSWORD: ${{ secrets.SENDER_PASSWORD }}"
-          echo "RECIPIENT_EMAIL: ${{ secrets.RECIPIENT_EMAIL }}"
       - name: 부동산 블로그 포스팅
         run: python src/tistory/real_estate_posting.py
         env:
