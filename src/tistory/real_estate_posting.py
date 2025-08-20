@@ -151,7 +151,10 @@ def post_to_tistory_requests(blog_name, tistory_id, tistory_pw, content):
             return tistory_cookie_str
 
         except Exception as e:
+            screenshot_path = "selenium_error.png"
+            driver.save_screenshot(screenshot_path)
             print(f"Selenium 로그인 중 오류 발생: {e}")
+            print(f"오류 발생 시 스크린샷 저장됨: {screenshot_path}")
             return None
         finally:
             driver.quit()
