@@ -40,7 +40,7 @@ jobs:
 
       - name: Upload Selenium Error Screenshot
         uses: actions/upload-artifact@v4
-        if: failure()
+        if: always()
         with:
           name: selenium-error-screenshot
           path: selenium_error.png
