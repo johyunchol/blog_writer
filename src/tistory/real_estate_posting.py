@@ -5,9 +5,11 @@ import smtplib
 from datetime import datetime
 from email.mime.multipart import MIMEMultipart
 from email.mime.text import MIMEText
+from zoneinfo import ZoneInfo
 
 import google.generativeai as genai
 import requests
+from bs4 import BeautifulSoup
 
 
 # --- Helper function for BMP filtering ---
@@ -53,25 +55,74 @@ def generate_post_with_gemini(api_key):
     genai.configure(api_key=api_key)
     model = genai.GenerativeModel('gemini-1.5-flash')
 
-    today_date = datetime.now().strftime('%Y년 %m월 %d일')
+    kst = ZoneInfo("Asia/Seoul")
+    today_date = datetime.now(kst).strftime('%Y-%m-%d')
+    
+    # 네이버 부동산 뉴스 API 호출
+    try:
+        print(f"{today_date}의 네이버 부동산 뉴스를 가져옵니다...")
+        news_api_url = f"https://m2.land.naver.com/news/airsList.naver?baseDate={today_date}&page=1&size=30"
+        headers = {
+            'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36'
+        }
+        response = requests.get(news_api_url, headers=headers)
+        response.raise_for_status()
+        news_data = response.json()
+        
+        # linkUrl만 추출하여 리스트로 만듦
+        link_urls = [item['linkUrl'] for item in news_data.get('list', [])]
+        
+        if not link_urls:
+            print("가져온 뉴스 기사가 없습니다.")
+            return None
+
+        # BeautifulSoup을 사용하여 모든 기사 내용 가져오기
+        print(f"{len(link_urls)}개의 뉴스 기사 내용을 가져옵니다...")
+        fetched_articles_texts = []
+        for url in link_urls:
+            try:
+                article_response = requests.get(url, headers=headers)
+                article_response.raise_for_status()
+                soup = BeautifulSoup(article_response.text, 'html.parser')
+                
+                # 네이버 뉴스 본문 선택자 (일반적인 경우)
+                article_body = soup.select_one('#articleBodyContents, #newsct_article')
+
+                if article_body:
+                    # 불필요한 요소(광고, 스크립트 등) 제거
+                    for el in article_body.select('script, style, .ad, .promotion, .link_news, .journalist_card'):
+                        el.decompose()
+                    
+                    text = article_body.get_text(separator='\n', strip=True)
+                    fetched_articles_texts.append(text)
+                else:
+                    print(f"기사 본문을 찾을 수 없습니다: {url}")
+
+            except requests.exceptions.RequestException as e:
+                print(f"기사 내용 로딩 중 오류 발생 (URL: {url}): {e}")
+                continue # 한 기사 실패 시 다음으로 넘어감
+        
+        if not fetched_articles_texts:
+            print("모든 뉴스 기사의 내용을 가져오는데 실패했습니다.")
+            return None
+
+        fetched_articles_text = "\n\n---\n\n".join(fetched_articles_texts)
+        print("뉴스 기사 내용 가져오기 완료!")
+
+    except requests.exceptions.RequestException as e:
+        print(f"네이버 부동산 뉴스 API 호출 중 오류 발생: {e}")
+        return None
+    except (KeyError, TypeError) as e:
+        print(f"뉴스 데이터 파싱 중 오류 발생: {e}")
+        return None
+    except Exception as e:
+        print(f"웹 콘텐츠를 가져오는 중 오류 발생: {e}")
+        return None
+
 
     prompt = f"""
-    오늘 날짜({today_date})의 최신 부동산 뉴스를 오늘 날짜의 기사를 정리하고, 
-    검색된 뉴스 기사들의 핵심 내용을 종합하여 현재 부동산 시장의 동향을 분석하는 전문적인 Tistory 블로그 글을 작성해 주세요.
-    
-    **다음의 사이트들에서 자료를 취합해 주세요**
-    - https://m2.land.naver.com/news : <div class="article" id="article_today"></div> 에 오늘 날짜의 뉴스가 있습니다.
-    
-    **다음 지침을 반드시 따라주세요:**
-    - **티스토리 TinyMCE 에디터에 맞는 html 형식**으로 작성해주세요. 단, <body> 안에 들어가는 내용만 뽑아주세요. <html><head>는 필요없습니다.
-    - 글의 가장 첫 줄에는 흥미를 유발할 수 있는 **제목**을 `# 제목` 형식으로 넣어주세요.
-    - 서론, 본론, 결론의 구조를 갖추고, 각 뉴스 내용을 자연스럽게 연결하여 설명해주세요.
-    - 독자들이 이해하기 쉽게 친절하고 전문적인 어조를 사용해주세요.
-    - 이모티콘등을 섞어서 사용해주세요. 단, 첫줄에는 이모티콘을 사용하지 마세요.
-    - 글의 마지막에는 태그::부동산,부동산뉴스,시장분석,내집마련 등 관련 **태그**를 5개 이상 추가해주세요.
-    - 글의 내용은 **2000자 이상** 작성해주세요.
-    - 제목의 길이는 너무 길지 않게 30자에서 40자 사이로 작성해주세요.
-    """
+    **당신은 부동산 시장 분석 전문 연구원입니다.** 아래 제공된 최신 부동산 뉴스 기사 본문 전체를 기반으로, 전문적인 '부동산 시장 동향 분석 보고서'를 작성해 주세요.\n\n    **{today_date} 최신 부동산 뉴스 기사 본문:**\n    {fetched_articles_text}\n\n    **보고서 작성 지침:**\n    - **목표:** 뉴스 기사의 핵심 내용을 정확하게 분석하고, 객관적인 데이터와 사실에 기반하여 시장 동향을 예측하고 전문적인 분석을 제공하는 보고서 작성.\n    - **형식:** `<body>` 태그 없이, 각 HTML 요소에 CSS 스타일이 인라인으로 적용된 완벽한 HTML 형식으로 작성해주세요.\n        - 보고서 제목: `<h1 style=\"font-family: 'Noto Sans KR', sans-serif; font-size: 24px; font-weight: bold; margin-bottom: 20px;\">`\n        - 각 섹션 제목 (예: 개요, 주요 뉴스 분석): `<h2 style=\"font-family: 'Noto Sans KR', sans-serif; font-size: 20px; font-weight: bold; margin-top: 25px; margin-bottom: 15px; border-bottom: 2px solid #333;\">`\n        - 본문 단락: `<p style=\"font-family: 'Noto Sans KR', sans-serif; line-height: 1.8; margin: 10px 0;\">`\n        - 핵심 사항 목록: `<ul>`과 `<li>` 태그를 사용하여 명확하게 정리해주세요.\n    - **보고서 구조:**\n        1. **제목:** 보고서의 전체 내용을 함축하는 명료한 제목을 첫 줄에 `# 제목` 형식으로 작성해주세요.\n        2. **1. 개요:** 전체 보고서의 핵심 내용을 요약하여 서두에 제시합니다. 독자가 이 부분만 읽어도 전체 내용을 파악할 수 있도록 작성해주세요.\n        3. **2. 주요 뉴스 분석:** 기사 내용에서 도출한 3가지 핵심 주제를 바탕으로, 각각의 현상과 원인, 시장에 미치는 영향을 심층적으로 분석합니다.\n        4. **3. 시장 전망 및 제언:** 분석 내용을 종합하여 향후 시장을 전망하고, 독자들이 참고할 수 있는 구체적인 제언이나 전략을 제시합니다.\n    - **어조:** 감정적인 표현이나 이모티콘은 완전히 배제하고, 데이터와 사실에 기반한 건조하고 객관적이며, 분석적인 전문 연구원의 어조를 유지해주세요.\n    - **태그:** 글의 마지막에 `태그::부동산보고서,시장분석,부동산전망,데이터분석,정책동향` 등 보고서의 성격에 맞는 전문적인 태그를 5개 이상 추가해주세요.\n    - **분량:** 전체 내용은 2000자 이상으로 작성해주세요.\n    """
+
 
     try:
         response = model.generate_content(prompt)
