@@ -17,6 +17,187 @@ def remove_non_bmp_chars(s):
     return "".join(c for c in s if c <= '\uFFFF')
 
 
+# --- HTML 콘텐츠 변환 함수 ---
+def convert_to_tistory_html(content):
+    """Gemini가 생성한 콘텐츠를 Tistory 형식의 HTML로 변환합니다."""
+    styles = get_html_styles()
+    html_content = ""
+
+    lines = content.split('\n')
+    in_list = False
+
+    for line in lines:
+        line = line.strip()
+
+        if not line:
+            # 빈 줄 처리
+            html_content += '<p data-ke-size="size16"><br data-mce-bogus="1"></p>\n'
+
+        elif line.startswith('<h1'):
+            # H1 제목
+            html_content += f'{line}\n'
+
+        elif line.startswith('<h2'):
+            # H2 섹션 제목
+            if in_list:
+                html_content += '</ul>\n'
+                in_list = False
+            html_content += f'{line}\n'
+
+        elif line.startswith('<h3'):
+            # H3 소제목
+            if in_list:
+                html_content += '</ul>\n'
+                in_list = False
+            html_content += f'{line}\n'
+
+        elif line.startswith('<ul>'):
+            # 목록 시작
+            html_content += f'<ul style="{styles["ul"]}" data-ke-list-type="disc">\n'
+            in_list = True
+
+        elif line.startswith('<li>'):
+            # 목록 항목
+            html_content += f'<li style="{styles["li"]}" data-ke-list-type="disc">{line[4:-5]}</li>\n'
+
+        elif line.startswith('</ul>'):
+            # 목록 끝
+            html_content += '</ul>\n'
+            in_list = False
+
+        elif line.startswith('<p'):
+            # 기존 p 태그가 있는 경우
+            if in_list:
+                html_content += '</ul>\n'
+                in_list = False
+            html_content += f'{line}\n'
+
+        else:
+            # 일반 텍스트 줄
+            if in_list:
+                html_content += '</ul>\n'
+                in_list = False
+
+            # strong 태그 처리
+            if '<strong>' in line:
+                line = line.replace('<strong>', f'<strong style="{styles["strong"]}">')
+
+            html_content += f'<p style="{styles["p"]}" data-ke-size="size16">{line}</p>\n'
+
+    # 목록이 열려있으면 닫기
+    if in_list:
+        html_content += '</ul>\n'
+
+    return html_content.strip()
+
+
+# --- HTML 스타일링 함수 ---
+def get_html_styles():
+    """Tistory 블로그용 HTML 스타일을 반환합니다."""
+    return {
+        'h1': "font-family: 'Noto Sans KR', sans-serif; font-size: 26px; font-weight: bold; margin-bottom: 25px; color: #2c3e50; text-align: center;",
+        'h2': "font-family: 'Noto Sans KR', sans-serif; font-size: 22px; font-weight: bold; margin-top: 30px; margin-bottom: 18px; border-bottom: 3px solid #3498db; padding-bottom: 8px; color: #2c3e50;",
+        'h3': "font-family: 'Noto Sans KR', sans-serif; font-size: 18px; font-weight: bold; margin-top: 25px; margin-bottom: 15px; color: #34495e;",
+        'p': "font-family: 'Noto Sans KR', sans-serif; line-height: 1.8; margin: 12px 0; color: #2c3e50; font-size: 16px;",
+        'ul': "font-family: 'Noto Sans KR', sans-serif; line-height: 1.7; margin: 15px 0; padding-left: 20px;",
+        'li': "margin-bottom: 8px; color: #2c3e50;",
+        'strong': "color: #e74c3c; font-weight: bold;",
+        'highlight_box': "background-color: #f8f9fa; border-left: 4px solid #3498db; padding: 15px; margin: 20px 0; border-radius: 5px;"
+    }
+
+
+# --- 프롬프트 템플릿 함수 ---
+def create_analysis_prompt(today_date, fetched_articles_text):
+    """부동산 분석 보고서 생성을 위한 최적화된 프롬프트를 생성합니다."""
+    styles = get_html_styles()
+
+    system_role = """
+당신은 15년 경력의 부동산 시장 분석 전문가입니다.
+주요 역할:
+- 부동산 시장 트렌드 분석 및 예측
+- 정책 변화가 시장에 미치는 영향 분석
+- 투자자와 실수요자를 위한 실용적 인사이트 제공
+"""
+
+    content_framework = """
+다음 분석 프레임워크를 활용하여 보고서를 작성하세요:
+
+1. **정책 및 제도 변화**: 금리, 대출규제, 세제 변화 등
+2. **시장 동향 분석**: 가격 변동, 거래량, 지역별 특징
+3. **수급 균형**: 공급물량, 수요 패턴, 미분양 현황
+4. **투자 환경**: 수익률, 리스크 요소, 기회 영역
+"""
+
+    target_audience = """
+독자 타겟:
+- 부동산 투자를 검토하는 개인 투자자 (30-50대)
+- 내집 마련을 준비하는 실수요자 (20-40대)
+- 부동산 시장 동향에 관심 있는 일반인
+"""
+
+    output_structure = f"""
+보고서 구조 (각 HTML 요소에 인라인 스타일 적용):
+1. **제목**: <h1 style="{styles['h1']}">{today_date} 부동산 시장 분석 리포트</h1> (# 형식으로 시작)
+2. **핵심 요약**: <div style="{styles['highlight_box']}">3-4줄 핵심 내용</div>
+3. **주요 동향 분석**: <h2 style="{styles['h2']}">섹션 제목</h2>으로 구분
+   - 정책/제도 변화와 시장 영향
+   - 지역별/유형별 시장 동향
+   - 주목할 만한 거래 패턴
+4. **시장 전망**: <h2 style="{styles['h2']}">향후 3-6개월 예상 시나리오</h2>
+5. **실용 가이드**: <h3 style="{styles['h3']}">투자자별/실수요자별 구체적 행동 지침</h3>
+"""
+
+    writing_guidelines = """
+작성 지침:
+- 객관적 데이터와 사실 중심, 구체적 수치 활용
+- 전문 용어 사용 시 (용어 설명) 병행
+- 감정적 표현 완전 배제, 분석적 어조 유지
+- "투자 기회", "매수 타이밍" 등 실행 가능한 구체적 제언
+- 위험 요소와 기회 요소 균형 있게 제시
+"""
+
+    format_instructions = f"""
+필수 형식 요구사항:
+- 제목: # 형식으로 시작 (마크다운)
+- HTML 요소별 인라인 CSS 스타일:
+  * H1: style="{styles['h1']}"
+  * H2: style="{styles['h2']}"
+  * H3: style="{styles['h3']}"
+  * P: style="{styles['p']}"
+  * Strong: style="{styles['strong']}"
+  * UL: style="{styles['ul']}"
+- 핵심 포인트는 <ul>, <li> 태그로 목록화
+- 중요 내용은 <strong> 태그로 강조
+- 하이라이트 박스: <div style="{styles['highlight_box']}">내용</div>
+- 마지막에 '태그::부동산분석,시장동향,투자전략,정책변화,지역별분석' 형식 (5개 이상)
+- 전체 분량: 2800자 이상
+"""
+
+    prompt = f"""
+{system_role}
+
+{target_audience}
+
+**분석 대상**: {today_date} 부동산 뉴스
+
+**뉴스 원문**:
+{fetched_articles_text}
+
+{content_framework}
+
+{output_structure}
+
+{writing_guidelines}
+
+{format_instructions}
+
+위 지침을 정확히 따라 독자에게 실질적 도움이 되는 전문적인 부동산 시장 분석 보고서를 작성하세요.
+독자가 "오늘 읽길 잘했다"고 생각할 만한 실용적 인사이트를 제공하세요.
+"""
+
+    return prompt
+
+
 # --- 이메일 전송 함수 ---
 def send_email(subject, body, sender_email, sender_password, recipient_email):
     """지정된 주소로 이메일을 전송합니다."""
@@ -120,8 +301,8 @@ def generate_post_with_gemini(api_key):
         return None
 
 
-    prompt = f"""
-    **당신은 부동산 시장 분석 전문 연구원입니다.** 아래 제공된 최신 부동산 뉴스 기사 본문 전체를 기반으로, 전문적인 '부동산 시장 동향 분석 보고서'를 작성해 주세요.\n\n    **{today_date} 최신 부동산 뉴스 기사 본문:**\n    {fetched_articles_text}\n\n    **보고서 작성 지침:**\n    - **목표:** 뉴스 기사의 핵심 내용을 정확하게 분석하고, 객관적인 데이터와 사실에 기반하여 시장 동향을 예측하고 전문적인 분석을 제공하는 보고서 작성.\n    - **형식:** `<body>` 태그 없이, 각 HTML 요소에 CSS 스타일이 인라인으로 적용된 완벽한 HTML 형식으로 작성해주세요.\n        - 보고서 제목: `<h1 style=\"font-family: 'Noto Sans KR', sans-serif; font-size: 24px; font-weight: bold; margin-bottom: 20px;\">`\n        - 각 섹션 제목 (예: 개요, 주요 뉴스 분석): `<h2 style=\"font-family: 'Noto Sans KR', sans-serif; font-size: 20px; font-weight: bold; margin-top: 25px; margin-bottom: 15px; border-bottom: 2px solid #333;\">`\n        - 본문 단락: `<p style=\"font-family: 'Noto Sans KR', sans-serif; line-height: 1.8; margin: 10px 0;\">`\n        - 핵심 사항 목록: `<ul>`과 `<li>` 태그를 사용하여 명확하게 정리해주세요.\n    - **보고서 구조:**\n        1. **제목:** 보고서의 전체 내용을 함축하는 명료한 제목을 첫 줄에 `# 제목` 형식으로 작성해주세요.\n        2. **1. 개요:** 전체 보고서의 핵심 내용을 요약하여 서두에 제시합니다. 독자가 이 부분만 읽어도 전체 내용을 파악할 수 있도록 작성해주세요.\n        3. **2. 주요 뉴스 분석:** 기사 내용에서 도출한 3가지 핵심 주제를 바탕으로, 각각의 현상과 원인, 시장에 미치는 영향을 심층적으로 분석합니다.\n        4. **3. 시장 전망 및 제언:** 분석 내용을 종합하여 향후 시장을 전망하고, 독자들이 참고할 수 있는 구체적인 제언이나 전략을 제시합니다.\n    - **어조:** 감정적인 표현이나 이모티콘은 완전히 배제하고, 데이터와 사실에 기반한 건조하고 객관적이며, 분석적인 전문 연구원의 어조를 유지해주세요.\n    - **태그:** 글의 마지막에 `태그::부동산보고서,시장분석,부동산전망,데이터분석,정책동향` 등 보고서의 성격에 맞는 전문적인 태그를 5개 이상 추가해주세요.\n    - **분량:** 전체 내용은 2000자 이상으로 작성해주세요.\n    """
+    # 개선된 프롬프트 생성
+    prompt = create_analysis_prompt(today_date, fetched_articles_text)
 
 
     try:
@@ -247,12 +428,8 @@ def post_to_tistory_requests(blog_name, tistory_id, tistory_pw, content):
 
     title = remove_non_bmp_chars(title)
 
-    html_content = ""
-    for line in post_content.split('\n'):
-        if line.strip() == "":
-            html_content += '<p data-ke-size="size16"><br data-mce-bogus="1"></p>'
-        else:
-            html_content += f'<p data-ke-size="size16">{line}</p>'
+    # HTML 콘텐츠를 개선된 스타일로 변환
+    html_content = convert_to_tistory_html(post_content)
 
     payload = {
         "id": "0",
