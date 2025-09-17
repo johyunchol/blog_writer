@@ -115,6 +115,7 @@ class BlogPosterGUI:
             "네이버 블로그",
             enabled=False  # 초기값, 설정 로드 후 업데이트
         )
+        self.platform_checkboxes['naver'].set_parent_app(self)
         self.platform_checkboxes['naver'].pack(fill=tk.X, pady=2)
 
         # 티스토리 플랫폼
@@ -123,6 +124,7 @@ class BlogPosterGUI:
             "티스토리",
             enabled=False  # 초기값, 설정 로드 후 업데이트
         )
+        self.platform_checkboxes['tistory'].set_parent_app(self)
         self.platform_checkboxes['tistory'].pack(fill=tk.X, pady=2)
 
         # 새로고침 버튼
@@ -333,11 +335,11 @@ class BlogPosterGUI:
             # 설정값을 GUI에 반영
             self._update_settings_ui()
 
-            # 플랫폼 상태 업데이트
-            self._refresh_platform_status()
-
             # 컴포넌트 초기화
             self._initialize_components()
+
+            # 플랫폼 상태 업데이트
+            self._refresh_platform_status()
 
         except Exception as e:
             self.log(f"❌ 설정 로드 실패: {e}")
@@ -435,13 +437,32 @@ class BlogPosterGUI:
                     platform_status = status[platform_type]
                     if platform_status['ready']:
                         checkbox.set_ready()
+                        # 준비된 플랫폼은 기본으로 체크
+                        checkbox.var.set(True)
                     else:
                         checkbox.set_disabled()
+
+            # 플랫폼 선택 상태 변경 시 포스팅 버튼 상태 업데이트
+            self._update_post_button_state()
 
             self.log("🔄 플랫폼 상태 업데이트 완료")
 
         except Exception as e:
             self.log(f"❌ 플랫폼 상태 업데이트 실패: {e}")
+
+    def _update_post_button_state(self):
+        """포스팅 버튼 상태 업데이트"""
+        try:
+            has_content = self.generated_content is not None
+            has_selected_platform = any(cb.is_selected() for cb in self.platform_checkboxes.values())
+
+            if has_content and has_selected_platform:
+                self.post_btn.config(state=tk.NORMAL)
+            else:
+                self.post_btn.config(state=tk.DISABLED)
+
+        except Exception as e:
+            self.log(f"❌ 포스팅 버튼 상태 업데이트 실패: {e}")
 
     def _on_content_type_change(self, *args):
         """콘텐츠 유형 변경 시 호출"""
@@ -540,9 +561,8 @@ class BlogPosterGUI:
         self.generate_btn.config(state=tk.NORMAL)
         self.preview_btn.config(state=tk.NORMAL)
 
-        # 선택된 플랫폼이 있으면 포스팅 버튼 활성화
-        if any(cb.is_selected() for cb in self.platform_checkboxes.values()):
-            self.post_btn.config(state=tk.NORMAL)
+        # 포스팅 버튼 상태 업데이트
+        self._update_post_button_state()
 
     def _on_content_generation_error(self, error_msg: str):
         """콘텐츠 생성 오류 시 호출"""

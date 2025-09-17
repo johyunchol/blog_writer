@@ -34,63 +34,74 @@ class PosterFactory:
         """새로운 플랫폼 포스터 클래스 등록"""
         cls._poster_classes[platform] = poster_class
 
-    def create_poster(self, platform: PlatformType, **kwargs) -> Optional[AbstractPoster]:
+    @classmethod
+    def create_poster(cls, platform: str, config_manager: ConfigManager, **kwargs) -> Optional[AbstractPoster]:
         """
         플랫폼별 포스터 인스턴스 생성
 
         Args:
-            platform: 대상 플랫폼
+            platform: 대상 플랫폼 (문자열)
+            config_manager: 설정 관리자 인스턴스
             **kwargs: 추가 설정 파라미터
 
         Returns:
             생성된 포스터 인스턴스 또는 None
         """
+        logger = logging.getLogger(__name__)
+
         try:
+            # 문자열을 PlatformType enum으로 변환
+            if isinstance(platform, str):
+                platform_enum = PlatformType.from_string(platform)
+            else:
+                platform_enum = platform
+
             # 플랫폼 지원 여부 확인
-            if platform not in self._poster_classes:
-                self.logger.error(f"지원하지 않는 플랫폼: {platform}")
+            if platform_enum not in cls._poster_classes:
+                logger.error(f"지원하지 않는 플랫폼: {platform}")
                 return None
 
             # 플랫폼 설정 가져오기
-            platform_config = self.config_manager.get_platform_config(platform)
+            platform_config = config_manager.get_platform_config(platform_enum)
 
             if not platform_config.enabled:
-                self.logger.warning(f"플랫폼이 비활성화됨: {platform}")
+                logger.warning(f"플랫폼이 비활성화됨: {platform}")
                 return None
 
             # 필수 설정 확인
             if not platform_config.username or not platform_config.password:
-                self.logger.error(f"플랫폼 설정이 불완전함: {platform}")
+                logger.error(f"플랫폼 설정이 불완전함: {platform}")
                 return None
 
             # 포스터 클래스 가져오기
-            poster_class = self._poster_classes[platform]
+            poster_class = cls._poster_classes[platform_enum]
 
             # 플랫폼별 특수 파라미터 처리
             poster_kwargs = {
                 'username': platform_config.username,
                 'password': platform_config.password,
-                'headless': kwargs.get('headless', self.config_manager.config.headless),
+                'headless': kwargs.get('headless', config_manager.config.headless),
                 **kwargs
             }
 
             # 플랫폼별 추가 설정
-            if platform == PlatformType.TISTORY:
-                poster_kwargs.update(self._get_tistory_specific_kwargs(platform_config, kwargs))
-            elif platform == PlatformType.NAVER:
-                poster_kwargs.update(self._get_naver_specific_kwargs(platform_config, kwargs))
+            if platform_enum == PlatformType.TISTORY:
+                poster_kwargs.update(cls._get_tistory_specific_kwargs(platform_config, kwargs))
+            elif platform_enum == PlatformType.NAVER:
+                poster_kwargs.update(cls._get_naver_specific_kwargs(platform_config, kwargs))
 
             # 포스터 인스턴스 생성
             poster = poster_class(**poster_kwargs)
 
-            self.logger.info(f"{platform.value} 포스터 생성 완료")
+            logger.info(f"{platform_enum.value} 포스터 생성 완료")
             return poster
 
         except Exception as e:
-            self.logger.error(f"포스터 생성 실패 ({platform}): {e}")
+            logger.error(f"포스터 생성 실패 ({platform}): {e}")
             return None
 
-    def _get_tistory_specific_kwargs(self, config: PlatformConfig, kwargs: dict) -> dict:
+    @classmethod
+    def _get_tistory_specific_kwargs(cls, config: PlatformConfig, kwargs: dict) -> dict:
         """티스토리 전용 파라미터 생성"""
         tistory_kwargs = {}
 
@@ -107,7 +118,8 @@ class PosterFactory:
 
         return tistory_kwargs
 
-    def _get_naver_specific_kwargs(self, config: PlatformConfig, kwargs: dict) -> dict:
+    @classmethod
+    def _get_naver_specific_kwargs(cls, config: PlatformConfig, kwargs: dict) -> dict:
         """네이버 전용 파라미터 생성"""
         naver_kwargs = {}
 
@@ -127,7 +139,7 @@ class PosterFactory:
         enabled_platforms = self.config_manager.get_enabled_platforms()
 
         for platform in enabled_platforms:
-            poster = self.create_poster(platform, **kwargs)
+            poster = PosterFactory.create_poster(platform.value, self.config_manager, **kwargs)
             if poster:
                 posters[platform] = poster
             else:
@@ -136,20 +148,23 @@ class PosterFactory:
         self.logger.info(f"활성 포스터 {len(posters)}개 생성완료: {list(posters.keys())}")
         return posters
 
-    def get_supported_platforms(self) -> list:
+    @classmethod
+    def get_supported_platforms(cls) -> list:
         """지원하는 플랫폼 목록 반환"""
-        return list(self._poster_classes.keys())
+        return list(cls._poster_classes.keys())
 
-    def is_platform_supported(self, platform: PlatformType) -> bool:
+    @classmethod
+    def is_platform_supported(cls, platform: PlatformType) -> bool:
         """플랫폼 지원 여부 확인"""
-        return platform in self._poster_classes
+        return platform in cls._poster_classes
 
-    def validate_platform_config(self, platform: PlatformType) -> Dict[str, list]:
+    @classmethod
+    def validate_platform_config(cls, platform: PlatformType, config_manager: ConfigManager) -> Dict[str, list]:
         """플랫폼 설정 유효성 검증"""
         errors = {}
 
         try:
-            platform_config = self.config_manager.get_platform_config(platform)
+            platform_config = config_manager.get_platform_config(platform)
 
             # 기본 설정 검증
             if not platform_config.username:
@@ -183,7 +198,6 @@ class MultiPlatformPoster:
             config_manager: 설정 관리자 인스턴스
         """
         self.config_manager = config_manager
-        self.factory = PosterFactory(config_manager)
         self.logger = logging.getLogger(__name__)
 
     def post_to_all_platforms(self, blog_post, **kwargs) -> Dict[PlatformType, dict]:
@@ -261,7 +275,7 @@ class MultiPlatformPoster:
                 continue
 
             try:
-                poster = self.factory.create_poster(platform, **kwargs)
+                poster = PosterFactory.create_poster(platform.value, self.config_manager, **kwargs)
                 if not poster:
                     results[platform] = {
                         'success': False,
@@ -297,7 +311,7 @@ class MultiPlatformPoster:
         enabled_platforms = self.config_manager.get_enabled_platforms()
 
         for platform in PlatformType:
-            config_errors = self.factory.validate_platform_config(platform)
+            config_errors = PosterFactory.validate_platform_config(platform, self.config_manager)
             is_enabled = platform in enabled_platforms
             is_configured = len(config_errors) == 0
 

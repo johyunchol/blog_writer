@@ -37,10 +37,13 @@ class TistoryPoster(AbstractPoster):
             headless: 헤드리스 모드 여부
             category_id: 기본 카테고리 ID
         """
-        super().__init__(username, password, headless)
+        # 먼저 티스토리 특화 속성 설정
         self.blog_name = blog_name
         self.category_id = category_id
         self.cookies_str: Optional[str] = None
+
+        # 그 다음 부모 클래스 초기화 (URL 생성 시 blog_name 필요)
+        super().__init__(username, password, headless)
 
     def _get_platform_type(self) -> PlatformType:
         """플랫폼 타입 반환"""

@@ -20,6 +20,15 @@ class PlatformType(Enum):
     NAVER = "naver"
     TISTORY = "tistory"
 
+    @classmethod
+    def from_string(cls, platform_str: str):
+        """문자열에서 PlatformType enum으로 변환"""
+        platform_str = platform_str.lower()
+        for platform in cls:
+            if platform.value == platform_str:
+                return platform
+        raise ValueError(f"지원하지 않는 플랫폼: {platform_str}")
+
 
 @dataclass
 class BlogPost:

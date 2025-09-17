@@ -72,6 +72,7 @@ class PlatformCheckbox(ttk.Frame):
         self.platform_name = platform_name
         self.var = tk.BooleanVar()
         self.var.set(enabled)
+        self.parent_app = None  # 메인 앱 참조
 
         # 체크박스
         self.checkbox = ttk.Checkbutton(
@@ -79,7 +80,8 @@ class PlatformCheckbox(ttk.Frame):
             text=platform_name.upper(),
             variable=self.var,
             onvalue=True,
-            offvalue=False
+            offvalue=False,
+            command=self._on_checkbox_changed
         )
         self.checkbox.pack(side=tk.LEFT)
 
@@ -117,7 +119,17 @@ class PlatformCheckbox(ttk.Frame):
 
     def is_selected(self) -> bool:
         """선택 여부 반환"""
-        return self.var.get() and self.checkbox.cget('state') == 'normal'
+        return self.var.get() and self.checkbox.cget('state') != 'disabled'
+
+    def _on_checkbox_changed(self):
+        """체크박스 상태 변경 시 호출"""
+        # 메인 앱의 포스팅 버튼 상태 업데이트
+        if self.parent_app and hasattr(self.parent_app, '_update_post_button_state'):
+            self.parent_app._update_post_button_state()
+
+    def set_parent_app(self, app):
+        """메인 앱 참조 설정"""
+        self.parent_app = app
 
 
 class ScrollableText(ttk.Frame):
