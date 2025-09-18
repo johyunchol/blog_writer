@@ -47,52 +47,74 @@ class NaverPoster(AbstractPoster):
 
     def _get_post_create_url(self) -> str:
         """포스트 작성 URL 반환"""
-        return "https://blog.naver.com/PostWriteForm.naver"
+        return f"https://blog.naver.com/{self.username}?Redirect=Write"
 
     def login(self) -> bool:
         """네이버 계정 로그인"""
         try:
             self.logger.info("네이버 로그인을 시작합니다...")
 
+            # 드라이버 초기화 (없는 경우에만)
+            if not self.driver:
+                self.init_driver()
+
             # 로그인 페이지로 이동
             self.driver.get(self.login_url)
-            time.sleep(2)
+            self.wait.until(EC.presence_of_element_located((By.ID, 'id')))
 
-            # 로그인 폼 요소 대기
-            username_field = self._wait_for_element(By.ID, "id")
-            password_field = self._wait_for_element(By.ID, "pw")
+            # 이미 로그인된 상태 확인
+            if "nidlogin.login" not in self.driver.current_url:
+                self.logger.info("이미 로그인된 세션입니다.")
+                return True
 
-            # 네이버는 자동화 감지를 위해 직접 typing 시뮬레이션
-            self._human_like_typing(username_field, self.username)
-            time.sleep(1)
-            self._human_like_typing(password_field, self.password)
-            time.sleep(1)
+            # 로그인 폼 요소 대기 및 입력
+            id_input = self.wait.until(EC.presence_of_element_located((By.ID, 'id')))
+            pw_input = self.wait.until(EC.presence_of_element_located((By.ID, 'pw')))
+
+            # macOS는 Command, 다른 OS는 Ctrl
+            import platform
+            paste_key = Keys.COMMAND if platform.system() == 'Darwin' else Keys.CONTROL
+
+            # 실제 입력값 로그 출력 (보안을 위해 비밀번호는 마스킹)
+            self.logger.info(f"🔑 로그인 정보 - 아이디: '{self.username}' (길이: {len(self.username)}글자)")
+            self.logger.info(f"🔒 로그인 정보 - 비밀번호: '{self.password}' (길이: {len(self.password)}글자)")
+            print(f"🔑 로그인 정보 - 아이디: '{self.username}' (길이: {len(self.username)}글자)")
+            print(f"🔒 로그인 정보 - 비밀번호: '{self.password}' (길이: {len(self.password)}글자)")
+
+
+            # JavaScript를 사용하여 직접 값 설정 (자동화 감지 우회)
+            self.driver.execute_script("arguments[0].value = arguments[1];", id_input, self.username)
+            time.sleep(0.3)
+
+            self.driver.execute_script("arguments[0].value = arguments[1];", pw_input, self.password)
+            time.sleep(0.3)
+
+            # 입력 후 실제 입력된 값 확인
+            actual_id = self.driver.execute_script("return arguments[0].value;", id_input)
+            actual_pw = self.driver.execute_script("return arguments[0].value;", pw_input)
+            self.logger.info(f"✅ 실제 입력된 아이디: '{actual_id}' (길이: {len(actual_id)}글자)")
+            self.logger.info(f"✅ 실제 입력된 비밀번호: '{'*' * len(actual_pw)}' (길이: {len(actual_pw)}글자)")
 
             # 로그인 버튼 클릭
-            login_button = self._wait_for_clickable(By.ID, "log.login")
-            self._safe_click(login_button)
+            login_button = self.wait.until(EC.element_to_be_clickable((By.ID, 'log.login')))
+            login_button.click()
 
-            # 로그인 성공 확인 (네이버 메인 페이지 또는 블로그 페이지로 리다이렉트)
-            time.sleep(3)
+            # URL 변경 대기 (로그인 성공 시)
+            self.wait.until(EC.url_changes("https://nid.naver.com/nidlogin.login"))
+            self.logger.info("네이버 로그인 성공!")
 
-            # 성공적인 로그인 확인
-            if "naver.com" in self.driver.current_url and "nidlogin" not in self.driver.current_url:
-                self.logger.info("네이버 로그인 성공!")
+            # 블로그 페이지로 이동하여 블로그 URL 획득
+            self._get_blog_url()
+            return True
 
-                # 블로그 페이지로 이동하여 블로그 URL 획득
-                self._get_blog_url()
-                return True
-            else:
-                raise LoginError("로그인 실패: 인증되지 않은 상태")
-
-        except TimeoutException:
-            self.logger.error("로그인 시간 초과")
+        except (NoSuchElementException, TimeoutException) as e:
+            self.logger.error(f"로그인 시간 초과 또는 요소를 찾지 못함: {e}")
             self._save_error_screenshot("login_timeout")
-            raise LoginError("로그인 시간 초과")
+            raise LoginError(f"로그인 자동화 중 요소를 찾지 못했거나 시간 초과: {e}")
         except Exception as e:
             self.logger.error(f"로그인 실패: {e}")
             self._save_error_screenshot("login_error")
-            raise LoginError(f"로그인 실패: {e}")
+            raise LoginError(f"로그인 자동화 중 알 수 없는 오류 발생: {e}")
 
     def _human_like_typing(self, element, text: str) -> None:
         """사람과 같은 타이핑 시뮬레이션"""

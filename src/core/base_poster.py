@@ -8,6 +8,7 @@ from typing import Dict, List, Optional, Tuple
 from dataclasses import dataclass
 from enum import Enum
 import logging
+import os
 from selenium import webdriver
 from selenium.webdriver.common.by import By
 from selenium.webdriver.support.ui import WebDriverWait
@@ -110,20 +111,30 @@ class AbstractPoster(ABC):
         pass
 
     def init_driver(self) -> None:
-        """웹드라이버 초기화"""
+        """웹드라이버 초기화 (infrastructure.py 방식 적용)"""
         options = webdriver.ChromeOptions()
+
+        # 세션 데이터 저장 디렉토리 설정 (infrastructure.py와 동일)
+        user_data_dir = os.path.join(os.path.expanduser("~"), f".{self.platform_type.value}-blogger-session")
+        options.add_argument(f"user-data-dir={user_data_dir}")
+        options.add_argument("--start-maximized")
+
+        self.logger.info(f"🖥️ 브라우저 헤드리스 모드: {self.headless}")
         if self.headless:
             options.add_argument("--headless")
-        options.add_argument("--no-sandbox")
-        options.add_argument("--disable-dev-shm-usage")
-        options.add_argument("--disable-blink-features=AutomationControlled")
-        options.add_experimental_option("excludeSwitches", ["enable-automation"])
-        options.add_experimental_option('useAutomationExtension', False)
+            self.logger.info("🔄 헤드리스 모드로 브라우저 실행")
+        else:
+            self.logger.info("👀 브라우저 창을 화면에 표시")
 
         try:
-            self.driver = webdriver.Chrome(options=options)
-            self.wait = WebDriverWait(self.driver, 10)
-            self.driver.execute_script("Object.defineProperty(navigator, 'webdriver', {get: () => undefined})")
+            from webdriver_manager.chrome import ChromeDriverManager
+            from selenium.webdriver.chrome.service import Service
+
+            service = Service(ChromeDriverManager().install())
+            self.driver = webdriver.Chrome(service=service, options=options)
+            self.driver.implicitly_wait(5)
+            self.wait = WebDriverWait(self.driver, 20)
+
             self.logger.info("웹드라이버 초기화 완료")
         except Exception as e:
             raise BlogPosterError(f"웹드라이버 초기화 실패: {e}")

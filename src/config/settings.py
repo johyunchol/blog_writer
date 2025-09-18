@@ -12,6 +12,7 @@ from dataclasses import dataclass, asdict
 from enum import Enum
 import logging
 from pathlib import Path
+from .encryption import PasswordEncryption
 
 from ..core.base_poster import PlatformType
 
@@ -112,6 +113,9 @@ class ConfigManager:
         # 설정 디렉토리 생성
         self.config_dir.mkdir(exist_ok=True)
 
+        # 암호화 시스템 초기화
+        self.password_encryption = PasswordEncryption(str(self.config_dir))
+
         # 설정 로드
         self.config = self._load_config()
 
@@ -192,16 +196,40 @@ class ConfigManager:
             return AppConfig()
 
     def _load_from_environment(self) -> AppConfig:
-        """환경변수에서 로드"""
+        """환경변수에서 로드 (환경변수 > 암호화 파일 순서)"""
         config = AppConfig()
 
-        # 네이버 설정
+        # 네이버 설정 (환경변수 > 암호화 파일 > 기본값)
         config.naver.username = os.getenv('NAVER_ID', config.naver.username)
-        config.naver.password = os.getenv('NAVER_PW', config.naver.password)
+        naver_pw_env = os.getenv('NAVER_PW')
 
-        # 티스토리 설정
+        # 디버깅 로그 추가
+        naver_id_masked = config.naver.username[:3] + "*" * (len(config.naver.username) - 3) if len(config.naver.username) > 3 else "***"
+        self.logger.info(f"🔑 환경변수에서 네이버 설정 로드 - 아이디: {naver_id_masked}")
+
+        if naver_pw_env:
+            config.naver.password = naver_pw_env
+            self.logger.info(f"✅ 네이버 비밀번호를 환경변수에서 로드 완료 (길이: {len(naver_pw_env)}글자)")
+        else:
+            # 환경변수에 없으면 암호화된 파일에서 시도
+            self.logger.info("🔍 환경변수에 네이버 비밀번호가 없어 암호화 파일에서 시도...")
+            encrypted_pw = self.password_encryption.get_password('NAVER_PW')
+            if encrypted_pw:
+                config.naver.password = encrypted_pw
+                self.logger.info(f"✅ 네이버 비밀번호를 암호화 파일에서 로드 완료 (길이: {len(encrypted_pw)}글자)")
+            else:
+                self.logger.warning("⚠️ 네이버 비밀번호를 찾을 수 없습니다.")
+
+        # 티스토리 설정 (환경변수 > 암호화 파일 > 기본값)
         config.tistory.username = os.getenv('TISTORY_ID', config.tistory.username)
-        config.tistory.password = os.getenv('TISTORY_PW', config.tistory.password)
+        tistory_pw_env = os.getenv('TISTORY_PW')
+        if tistory_pw_env:
+            config.tistory.password = tistory_pw_env
+        else:
+            # 환경변수에 없으면 암호화된 파일에서 시도
+            encrypted_pw = self.password_encryption.get_password('TISTORY_PW')
+            if encrypted_pw:
+                config.tistory.password = encrypted_pw
 
         # 티스토리 추가 설정
         blog_name = os.getenv('TISTORY_BLOG_NAME')
@@ -216,7 +244,7 @@ class ConfigManager:
         config.email.sender_password = os.getenv('SENDER_PASSWORD', config.email.sender_password)
         config.email.recipient_email = os.getenv('RECIPIENT_EMAIL', config.email.recipient_email)
 
-        # 앱 설정
+        # 앱 설정 (환경변수가 있을 때만 오버라이드)
         debug_env = os.getenv('DEBUG')
         if debug_env:
             config.debug = debug_env.lower() in ('true', '1', 'yes', 'on')
@@ -224,16 +252,20 @@ class ConfigManager:
         headless_env = os.getenv('HEADLESS')
         if headless_env:
             config.headless = headless_env.lower() in ('true', '1', 'yes', 'on')
+        else:
+            # 환경변수가 없으면 기본값을 유지하지 않고 None으로 표시
+            # _merge_configs에서 파일 설정이 우선되도록 함
+            config.headless = None
 
         return config
 
     def _merge_configs(self, base: AppConfig, override: AppConfig) -> AppConfig:
         """두 설정을 병합 (override가 우선)"""
         try:
-            # 간단한 필드는 직접 오버라이드
-            if override.debug != base.debug and hasattr(override, 'debug'):
+            # 간단한 필드는 직접 오버라이드 (환경변수가 설정된 경우만)
+            if hasattr(override, 'debug') and override.debug is not None:
                 base.debug = override.debug
-            if override.headless != base.headless and hasattr(override, 'headless'):
+            if hasattr(override, 'headless') and override.headless is not None:
                 base.headless = override.headless
 
             # 플랫폼별 설정 병합
@@ -357,7 +389,10 @@ recipient_email = your_recipient@gmail.com
 
 [app]
 debug = false
+# headless = true  # 브라우저를 숨김 모드로 실행 (기본값: true)
+# headless = false # 브라우저를 화면에 표시 (디버깅용)
 headless = true
+# 환경변수 HEADLESS=false로 설정하면 브라우저가 화면에 표시됩니다
 """
 
             sample_file = self.config_dir / "config.sample.ini"
@@ -471,7 +506,15 @@ headless = true
                     config_parser.set('naver', 'enabled', str(naver_values['enabled']).lower())
                 if 'username' in naver_values and naver_values['username']:
                     config_parser.set('naver', 'username', str(naver_values['username']))
-                # 비밀번호는 환경변수로 관리
+                # 비밀번호는 환경변수 + 암호화 파일로 설정
+                if 'password' in naver_values and naver_values['password']:
+                    import os
+                    password = str(naver_values['password'])
+                    # 환경변수 설정 (현재 세션용)
+                    os.environ['NAVER_PW'] = password
+                    # 암호화 파일 저장 (영구 저장용)
+                    self.password_encryption.save_password('NAVER_PW', password)
+                    self.logger.info("네이버 비밀번호가 환경변수 및 암호화 파일에 저장되었습니다")
 
             # 티스토리 설정 업데이트
             if 'tistory' in gui_values:
@@ -487,7 +530,15 @@ headless = true
                     config_parser.set('tistory', 'blog_name', str(tistory_values['blog_name']))
                 if 'category_id' in tistory_values and tistory_values['category_id']:
                     config_parser.set('tistory', 'category_id', str(tistory_values['category_id']))
-                # 비밀번호는 환경변수로 관리
+                # 비밀번호는 환경변수 + 암호화 파일로 설정
+                if 'password' in tistory_values and tistory_values['password']:
+                    import os
+                    password = str(tistory_values['password'])
+                    # 환경변수 설정 (현재 세션용)
+                    os.environ['TISTORY_PW'] = password
+                    # 암호화 파일 저장 (영구 저장용)
+                    self.password_encryption.save_password('TISTORY_PW', password)
+                    self.logger.info("티스토리 비밀번호가 환경변수 및 암호화 파일에 저장되었습니다")
 
             # 이미지 설정 업데이트
             if 'image' in gui_values:
@@ -519,7 +570,7 @@ headless = true
             self.logger.info(f"설정 파일 저장 완료: {self.config_file}")
 
             # 설정 다시 로드
-            self._load_config()
+            self.config = self._load_config()
 
             return True
 
@@ -571,3 +622,58 @@ headless = true
         backup_files = list(self.config_dir.glob("config.backup.*.ini"))
         backup_files.sort(key=lambda x: x.stat().st_mtime, reverse=True)
         return backup_files
+
+    def set_headless_mode(self, headless: bool, save_to_file: bool = True) -> bool:
+        """
+        헤드리스 모드 설정을 변경하고 선택적으로 파일에 저장
+
+        Args:
+            headless: 헤드리스 모드 활성화 여부
+            save_to_file: 설정 파일에 저장 여부
+
+        Returns:
+            설정 변경 성공 여부
+        """
+        try:
+            # 메모리 설정 변경
+            self.config.headless = headless
+
+            # 디버그 모드 로깅
+            status = "활성화" if headless else "비활성화"
+            self.logger.info(f"🔧 헤드리스 모드 {status}")
+
+            # 파일에 저장
+            if save_to_file:
+                success = self.save_to_file()
+                if success:
+                    self.logger.info(f"✅ 헤드리스 모드 설정 저장 완료: {headless}")
+                else:
+                    self.logger.error("❌ 헤드리스 모드 설정 저장 실패")
+                return success
+
+            return True
+
+        except Exception as e:
+            self.logger.error(f"헤드리스 모드 설정 변경 실패: {e}")
+            return False
+
+    def toggle_headless_mode(self, save_to_file: bool = True) -> bool:
+        """
+        헤드리스 모드를 토글하고 선택적으로 파일에 저장
+
+        Args:
+            save_to_file: 설정 파일에 저장 여부
+
+        Returns:
+            설정 변경 성공 여부
+        """
+        current_mode = self.config.headless
+        new_mode = not current_mode
+
+        self.logger.info(f"🔄 헤드리스 모드 토글: {current_mode} → {new_mode}")
+
+        return self.set_headless_mode(new_mode, save_to_file)
+
+    def get_headless_mode(self) -> bool:
+        """현재 헤드리스 모드 설정 반환"""
+        return self.config.headless

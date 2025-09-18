@@ -33,6 +33,12 @@ class BlogPosterGUI:
         self.multi_poster = None
         self.generated_content = None
 
+        # 비밀번호 원본 값 저장용 (마스킹된 값 대신 원본 유지)
+        self.original_passwords = {
+            'naver': None,
+            'tistory': None
+        }
+
         self._setup_window()
         self._create_widgets()
         self._load_config()
@@ -363,6 +369,8 @@ class BlogPosterGUI:
 
             # 네이버 설정
             naver_config = self.config_manager.get_platform_config(PlatformType.NAVER)
+            # 원본 비밀번호 저장 (마스킹을 위해)
+            self.original_passwords['naver'] = naver_config.password
             naver_values = {
                 "활성화": naver_config.enabled,
                 "사용자명": naver_config.username or "",
@@ -372,6 +380,8 @@ class BlogPosterGUI:
 
             # 티스토리 설정
             tistory_config = self.config_manager.get_platform_config(PlatformType.TISTORY)
+            # 원본 비밀번호 저장 (마스킹을 위해)
+            self.original_passwords['tistory'] = tistory_config.password
             tistory_values = {
                 "활성화": tistory_config.enabled,
                 "사용자명": tistory_config.username or "",
@@ -752,16 +762,26 @@ class BlogPosterGUI:
 
             # 네이버 설정 수집
             naver_values = self.naver_settings.get_values()
+            # 비밀번호가 마스킹되어 있으면 원본 값 사용
+            naver_password = naver_values.get('비밀번호', '')
+            if naver_password == '****' and self.original_passwords['naver']:
+                naver_password = self.original_passwords['naver']
             gui_values['naver'] = {
                 'enabled': naver_values.get('활성화', False),
-                'username': naver_values.get('사용자명', '')
+                'username': naver_values.get('사용자명', ''),
+                'password': naver_password
             }
 
             # 티스토리 설정 수집
             tistory_values = self.tistory_settings.get_values()
+            # 비밀번호가 마스킹되어 있으면 원본 값 사용
+            tistory_password = tistory_values.get('비밀번호', '')
+            if tistory_password == '****' and self.original_passwords['tistory']:
+                tistory_password = self.original_passwords['tistory']
             gui_values['tistory'] = {
                 'enabled': tistory_values.get('활성화', False),
                 'username': tistory_values.get('사용자명', ''),
+                'password': tistory_password,
                 'blog_name': tistory_values.get('블로그명', ''),
                 'category_id': tistory_values.get('카테고리 ID', '')
             }
