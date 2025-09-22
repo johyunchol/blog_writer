@@ -6,9 +6,12 @@ PRD.md 요구사항에 따른 네이버 블로그 포스팅 구현
 
 import time
 import re
+import os
+import platform
 from typing import Optional, List
 from selenium.webdriver.common.by import By
 from selenium.webdriver.support import expected_conditions as EC
+from selenium.webdriver.support.ui import WebDriverWait
 from selenium.webdriver.common.keys import Keys
 from selenium.common.exceptions import TimeoutException, NoSuchElementException
 from selenium.webdriver.common.action_chains import ActionChains
@@ -50,7 +53,7 @@ class NaverPoster(AbstractPoster):
         return f"https://blog.naver.com/{self.username}?Redirect=Write"
 
     def login(self) -> bool:
-        """네이버 계정 로그인"""
+        """네이버 계정 로그인 (infrastructure.py 방식 적용)"""
         try:
             self.logger.info("네이버 로그인을 시작합니다...")
 
@@ -67,7 +70,7 @@ class NaverPoster(AbstractPoster):
                 self.logger.info("이미 로그인된 세션입니다.")
                 return True
 
-            # 로그인 폼 요소 대기 및 입력
+            # 로그인 폼 요소 대기
             id_input = self.wait.until(EC.presence_of_element_located((By.ID, 'id')))
             pw_input = self.wait.until(EC.presence_of_element_located((By.ID, 'pw')))
 
@@ -75,36 +78,21 @@ class NaverPoster(AbstractPoster):
             import platform
             paste_key = Keys.COMMAND if platform.system() == 'Darwin' else Keys.CONTROL
 
-            # 실제 입력값 로그 출력 (보안을 위해 비밀번호는 마스킹)
-            self.logger.info(f"🔑 로그인 정보 - 아이디: '{self.username}' (길이: {len(self.username)}글자)")
-            self.logger.info(f"🔒 로그인 정보 - 비밀번호: '{self.password}' (길이: {len(self.password)}글자)")
-            print(f"🔑 로그인 정보 - 아이디: '{self.username}' (길이: {len(self.username)}글자)")
-            print(f"🔒 로그인 정보 - 비밀번호: '{self.password}' (길이: {len(self.password)}글자)")
-
-
-            # JavaScript를 사용하여 직접 값 설정 (자동화 감지 우회)
+            # JavaScript를 사용하여 직접 값 설정 (infrastructure.py 방식)
             self.driver.execute_script("arguments[0].value = arguments[1];", id_input, self.username)
             time.sleep(0.3)
 
             self.driver.execute_script("arguments[0].value = arguments[1];", pw_input, self.password)
             time.sleep(0.3)
 
-            # 입력 후 실제 입력된 값 확인
-            actual_id = self.driver.execute_script("return arguments[0].value;", id_input)
-            actual_pw = self.driver.execute_script("return arguments[0].value;", pw_input)
-            self.logger.info(f"✅ 실제 입력된 아이디: '{actual_id}' (길이: {len(actual_id)}글자)")
-            self.logger.info(f"✅ 실제 입력된 비밀번호: '{'*' * len(actual_pw)}' (길이: {len(actual_pw)}글자)")
-
             # 로그인 버튼 클릭
             login_button = self.wait.until(EC.element_to_be_clickable((By.ID, 'log.login')))
             login_button.click()
 
-            # URL 변경 대기 (로그인 성공 시)
+            # 로그인 성공 대기 (URL 변경으로 확인)
             self.wait.until(EC.url_changes("https://nid.naver.com/nidlogin.login"))
             self.logger.info("네이버 로그인 성공!")
 
-            # 블로그 페이지로 이동하여 블로그 URL 획득
-            self._get_blog_url()
             return True
 
         except (NoSuchElementException, TimeoutException) as e:
@@ -149,30 +137,51 @@ class NaverPoster(AbstractPoster):
             self.blog_url = "https://blog.naver.com/"
 
     def create_post(self, post: BlogPost) -> PostingResult:
-        """포스트 작성 (글과 이미지 교차 배치)"""
+        """포스트 작성 (infrastructure.py 방식 적용)"""
         try:
             self.logger.info(f"네이버 블로그 포스트 작성 시작: {post.title}")
 
             # 글쓰기 페이지로 이동
-            self.driver.get(self.post_create_url)
-            time.sleep(3)
+            write_page_url = f"https://blog.naver.com/{self.username}?Redirect=Write"
+            self.driver.get(write_page_url)
 
-            # 제목 입력
-            self._input_title(post.title)
+            # iframe으로 전환 (infrastructure.py 방식)
+            self.wait.until(EC.frame_to_be_available_and_switch_to_it((By.ID, "mainFrame")))
+            time.sleep(0.3)
 
-            # 본문 입력 (글과 이미지 교차 배치)
-            self._input_content_with_images(post.content, post.images or [])
+            # 팝업 처리 (infrastructure.py 방식)
+            short_wait = WebDriverWait(self.driver, 1)
 
-            # 태그 입력
-            if post.tags:
-                self._input_tags(post.tags)
+            try:
+                popup_cancel_button = short_wait.until(
+                    EC.element_to_be_clickable((By.CSS_SELECTOR, '.se-popup-button-cancel')))
+                popup_cancel_button.click()
+                self.logger.info("'다음에' 팝업 닫기 완료.")
+            except (TimeoutException, NoSuchElementException):
+                self.logger.info("'다음에' 팝업이 나타나지 않아 건너뜁니다.")
+                pass
 
-            # 카테고리 설정 (필요한 경우)
-            if post.category:
-                self._set_category(post.category)
+            try:
+                help_close_button = short_wait.until(
+                    EC.element_to_be_clickable((By.CSS_SELECTOR, '.se-help-panel-close-button')))
+                help_close_button.click()
+                self.logger.info("'도움말' 팝업 닫기 완료.")
+            except (TimeoutException, NoSuchElementException):
+                self.logger.info("'도움말' 팝업이 나타나지 않아 건너뜁니다.")
+                pass
 
-            # 공개 설정
-            self._set_visibility(post.visibility)
+            # 제목 입력 (infrastructure.py 방식)
+            title_input = self.wait.until(
+                EC.element_to_be_clickable((By.CSS_SELECTOR, ".se-section-documentTitle")))
+            actions = ActionChains(self.driver)
+            actions.click(title_input)
+            for char in post.title:
+                actions.send_keys(char).pause(0.03)
+            actions.perform()
+            time.sleep(0.3)
+
+            # 본문 입력 (infrastructure.py 방식으로 간단화)
+            self._insert_text_infrastructure_style(post.content)
 
             return PostingResult(
                 success=True,
@@ -555,6 +564,70 @@ class NaverPoster(AbstractPoster):
                 message=f"포스트 발행 실패: {str(e)}",
                 error_code="PUBLISH_FAILED"
             )
+
+    def _insert_text_infrastructure_style(self, text: str) -> None:
+        """HTML 텍스트 삽입 (infrastructure.py 방식)"""
+        temp_file_path = os.path.abspath("_temp_render.html")
+        original_window = self.driver.current_window_handle
+        copy_key = Keys.COMMAND if platform.system() == 'Darwin' else Keys.CONTROL
+
+        try:
+            # 1. 임시 HTML 파일 생성 및 작성
+            with open(temp_file_path, "w", encoding="utf-8") as f:
+                f.write(f'<!DOCTYPE html><html lang="ko"><head><meta charset="UTF-8"></head><body>{text}</body></html>')
+
+            # 2. 새 탭에서 임시 파일 열기
+            self.driver.switch_to.new_window('tab')
+            self.driver.get(f"file://{temp_file_path}")
+            # 새 탭의 body 요소가 로드될 때까지 명시적으로 대기
+            WebDriverWait(self.driver, 10).until(EC.presence_of_element_located((By.TAG_NAME, "body")))
+
+            # 3. 렌더링된 콘텐츠 전체 선택 및 복사
+            ActionChains(self.driver).key_down(copy_key).send_keys('a').send_keys('c').key_up(copy_key).perform()
+            time.sleep(0.3)
+
+            # 4. 새 탭 닫고 원래 편집기 탭으로 복귀
+            self.driver.close()
+            self.driver.switch_to.window(original_window)
+
+            # 5. 네이버 에디터 프레임으로 다시 전환하고 포커스 확보
+            self.wait.until(EC.frame_to_be_available_and_switch_to_it((By.ID, "mainFrame")))
+            time.sleep(0.3)
+
+            # 6. 에디터에 붙여넣기 (더 안정적인 포커스)
+            try:
+                # body를 한번 클릭하여 프레임 자체에 포커스를 줌
+                self.driver.find_element(By.TAG_NAME, "body").click()
+                time.sleep(0.3)
+            except Exception:
+                pass
+
+            # 붙여넣을 컨테이너를 다시 찾아 클릭
+            content_div = self.wait.until(EC.element_to_be_clickable((By.CSS_SELECTOR, ".se-section-text")))
+            content_div.click()
+
+            # 커서를 문서의 맨 끝으로 이동시켜 붙여넣기 위치를 조정
+            ActionChains(self.driver).key_down(copy_key).send_keys('a').key_up(copy_key).perform()
+            time.sleep(0.3)
+
+            # 커서를 문서의 맨 끝으로 이동
+            ActionChains(self.driver).key_down(Keys.ARROW_RIGHT).key_up(Keys.ARROW_RIGHT).perform()
+            time.sleep(0.3)
+
+            # 붙여넣기 실행
+            ActionChains(self.driver).key_down(copy_key).send_keys('v').key_up(copy_key).perform()
+            time.sleep(0.3)
+
+            # 다음 콘텐츠 입력을 위해 줄바꿈 2번
+            ActionChains(self.driver).send_keys(Keys.ENTER).send_keys(Keys.ENTER).perform()
+            time.sleep(0.3)
+
+            self.logger.info("HTML 콘텐츠 삽입 완료 (infrastructure.py 방식)")
+
+        finally:
+            # 7. 임시 파일 삭제
+            if os.path.exists(temp_file_path):
+                os.remove(temp_file_path)
 
     def _save_error_screenshot(self, error_type: str) -> None:
         """오류 발생 시 스크린샷 저장"""
